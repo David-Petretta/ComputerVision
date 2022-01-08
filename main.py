@@ -2,9 +2,10 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from wavepy import surface_from_grad
+from math import pi
+from colorsys import hls_to_rgb
 
 things = ["cat", "frog", "hippo", "lizard", "pig", "scholar", "turtle"]
-
 
 def obtainData(i):
     """
@@ -12,17 +13,15 @@ def obtainData(i):
     :return: a list of lightsource directions, a list of masked images lit with different lightsources
     """
     # Read all images
-    path1 = fr".\PSData\PSData\{things[i]}\Objects\Image_01.png"
-    path2 = fr".\PSData\PSData\{things[i]}\Objects\Image_02.png"
-    path3 = fr".\PSData\PSData\{things[i]}\Objects\Image_03.png"
-    path4 = fr".\PSData\PSData\{things[i]}\Objects\Image_04.png"
-    path5 = fr".\PSData\PSData\{things[i]}\Objects\Image_05.png"
+    paths = (
+        fr".\PSData\PSData\{things[i]}\Objects\Image_01.png",
+        fr".\PSData\PSData\{things[i]}\Objects\Image_02.png",
+        fr".\PSData\PSData\{things[i]}\Objects\Image_03.png",
+        fr".\PSData\PSData\{things[i]}\Objects\Image_04.png",
+        fr".\PSData\PSData\{things[i]}\Objects\Image_05.png"
+    )
 
-    img1 = cv2.imread(path1, 0)  # flag 0 reads in grayscale
-    img2 = cv2.imread(path2, 0)
-    img3 = cv2.imread(path3, 0)
-    img4 = cv2.imread(path4, 0)
-    img5 = cv2.imread(path5, 0)
+    imgs = [cv2.imread(p,0) for p in paths]
 
     # Shadow area does not contribute to finding normal
     # Create masks
@@ -39,13 +38,8 @@ def obtainData(i):
         return mask
 
     # Apply masks to images: cv2.bitwise
-    img1m = cv2.bitwise_or(img1, img1, mask=mask(img1, threshold))
-    img2m = cv2.bitwise_or(img2, img2, mask=mask(img2, threshold))
-    img3m = cv2.bitwise_or(img3, img3, mask=mask(img3, threshold))
-    img4m = cv2.bitwise_or(img4, img4, mask=mask(img4, threshold))
-    img5m = cv2.bitwise_or(img5, img5, mask=mask(img5, threshold))
-
-    imglist = [img1m, img2m, img3m, img4m, img5m]
+    #all images stores in imglist
+    imglist = [cv2.bitwise_or(img, img, mask=mask(img, threshold)) for img in imgs]
 
     # obtain lightsource directions
     with open(fr".\PSData\PSData\{things[i]}\refined_light.txt") as file:
@@ -58,7 +52,6 @@ def obtainData(i):
     sources1 = np.reshape(np.asarray(sources1), (20, 3))
 
     return sources1, imglist
-
 
 sources, imglist = obtainData(0)
 
@@ -105,22 +98,16 @@ def find_NormAlbedo(sources, imglist, rows, cols):
                 n = np.zeros_like(ntilde.flatten())
 
             normal[x][y] = n
-            albedo[x][y] = p
+            albedo[x,y] = p/8 #Values range from 0 to 1998.34. When tries to store in a byte, we only store the lower 8 bits
 
     return normal, albedo
 
 
 normal, albedo = find_NormAlbedo(sources, imglist, rows, cols)
-print(type(normal[70]))
-print(type(albedo[70]))
-print(type(normal[70][0]))
-print(type(albedo[70][0]))
-plt.imshow(albedo)
-plt.title("Albedo")
-#plt.show()
+# print(normal.shape)
+# print(albedo.shape)
 
-print(normal.shape)
-print(albedo.shape)
+
 # Estimate depth map from normals: Frankot Chellappa algorithm
 def depthfromgradient(normalmap):
     '''
@@ -143,17 +130,36 @@ def depthfromgradient(normalmap):
 
 
 surface = depthfromgradient(normal)
-print(surface.shape)
 
 #cv2 need np array to visualize
 surface = np.array(surface)
 albedo = np.array(albedo)
 normal = np.array(normal)
 
-print(surface[0][0])
 
-cv2.imshow('Albedo', albedo)
+print(f'example of pixel in normalmap: {normal[0][0]}')
+print(f'example of pixel in albedomap:{albedo[0][0]}')
+print(f'example of pixel in normalmap:{surface[0][0]}')
+
+#Visualize albedo
+cv2.imshow('Albedo map', albedo)
 cv2.waitKey()
 
-cv2.imshow('DepthMap', surface)
-cv2.waitKey()
+#Surface map is a complex number and can be visualized by colorizing it
+#Visualizing/colorizing comlpex array (def colorize(z)) adapted from https://stackoverflow.com/questions/17044052/matplotlib-imshow-complex-2d-array
+def colorize(z):
+    r = np.abs(z)
+    arg = np.angle(z)
+
+    h = (arg + pi)  / (2 * pi) + 0.5
+    l = 1.0 - 1.0/(1.0 + r**0.3)
+    s = 0.8
+
+    c = np.vectorize(hls_to_rgb)(h,l,s) # --> tuples
+    c = np.array(c)  # -->  array of (3,n,m) shape, but need (n,m,3)
+    c = c.swapaxes(0,2)
+    return c
+
+plt.imshow(colorize(surface))
+plt.show()
+
