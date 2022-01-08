@@ -39,7 +39,7 @@ def obtainData(i):
 
     # Apply masks to images: cv2.bitwise
     #all images stores in imglist
-    imglist = [cv2.bitwise_or(img, img, mask=mask(img, threshold)) for img in imgs]
+    imglist = [cv2.bitwise_and(img, img, mask=mask(img, threshold)) for img in imgs]
 
     # obtain lightsource directions
     with open(fr".\PSData\PSData\{things[i]}\refined_light.txt") as file:
